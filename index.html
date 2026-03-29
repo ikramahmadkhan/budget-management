@@ -287,10 +287,14 @@ let aiRec=null,aiIsRec=false;
 function initAI(){const S=window.SpeechRecognition||window.webkitSpeechRecognition;if(!S)return;aiRec=new S();aiRec.continuous=false;aiRec.interimResults=false;
   aiRec.onresult=async e=>{const text=e.results[0][0].transcript;document.getElementById("ai-fab").classList.remove("recording");document.getElementById("ai-fab").classList.add("thinking");document.getElementById("ai-label").textContent="Thinking...";toast("🤖 Processing: \""+text+"\"");
     try{
-      const resp=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:300,system:`You are an expense parser for a Pakistani household diary app. The user will speak in Urdu, Roman Urdu, or English. Extract: description, amount in PKR, and category. Available categories: ${catKeys.join(", ")}. Respond ONLY in JSON: {"desc":"...","amt":number,"cat":"category_key","note":"original voice text"}. If you can't determine amount, set amt to 0. Always pick the best category. For Urdu numbers: hazaar=1000, lakh=100000, sau=100. Examples: "do hazaar petrol" → {"desc":"Petrol","amt":2000,"cat":"petrol","note":"do hazaar petrol"}, "grocery ka saman 5000 rupay" → {"desc":"Grocery ka saman","amt":5000,"cat":"grocery","note":"grocery ka saman 5000 rupay"}`,messages:[{role:"user",content:text}]})});
+      /* ── AI PROXY URL ── Replace with your Cloudflare Worker URL after setup */
+      const AI_PROXY = "https://ikram-ai.ikram-ahmadkhan1085.workers.dev/";
+      /* e.g. "https://ikram-ai.your-subdomain.workers.dev" */
+      const resp=await fetch(AI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:text,categories:catKeys})});
       const data=await resp.json();
-      const raw=data.content.map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
-      const parsed=JSON.parse(raw);
+      let parsed;
+      if(data.desc!==undefined){parsed=data;} // Worker returns clean JSON
+      else{const raw=(data.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();parsed=JSON.parse(raw);} // Claude artifact env
       if(parsed.amt>0&&parsed.desc){
         await addExpense(parsed.desc,parsed.amt,parsed.cat,parsed.note||text);
         const c=C[parsed.cat]||C.misc;
